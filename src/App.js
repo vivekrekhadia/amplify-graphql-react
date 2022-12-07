@@ -1,132 +1,66 @@
-import React, { useState, useEffect } from "react";
+import React, { useContext, useEffect, useState } from "react";
+import { useDispatch, useSelector } from "react-redux";
+import { Navigate, Route, Routes } from "react-router-dom";
 import "./App.css";
-import "@aws-amplify/ui-react/styles.css";
-import { API, Storage } from "aws-amplify";
-import {
-  Button,
-  Flex,
-  Heading,
-  Image,
-  Text,
-  TextField,
-  View,
-  withAuthenticator,
-} from "@aws-amplify/ui-react";
-import { listNotes } from "./graphql/queries";
-import {
-  createNote as createNoteMutation,
-  deleteNote as deleteNoteMutation,
-} from "./graphql/mutations";
+import Navbar from "./components/Navbar";
+import { AuthContext } from "./context/authContext";
+import AuthPage from "./pages/Auth/AuthPage";
+import Home from "./pages/Home";
+import PrivateRoutes from "./PrivateRoutes";
+import { AuthSlice } from "./redux/Auth/AuthSlice";
 
-const App = ({ signOut }) => {
-  const [notes, setNotes] = useState([]);
-
+const App = () => {
+  const { getSession, setStatus, status, setAuthToken } =
+    useContext(AuthContext);
+  const dispatch = useDispatch();
+  const { actions } = AuthSlice;
+  const { authToken } = useSelector((state) => ({
+    authToken: state.Auth.authToken,
+  }));
   useEffect(() => {
-    fetchNotes();
-  }, []);
-
-  async function fetchNotes() {
-    const apiData = await API.graphql({ query: listNotes });
-    const notesFromAPI = apiData.data.listNotes.items;
-    await Promise.all(
-      notesFromAPI.map(async (note) => {
-        if (note.image) {
-          const url = await Storage.get(note.name);
-          note.image = url;
-        }
-        return note;
+    getSession()
+      .then((session) => {
+        console.log(session);
+        dispatch(actions.setAuthToken(true));
       })
-    );
-    setNotes(notesFromAPI);
-  }
+      .catch((err) => console.log(err));
+  }, []);
+  // useEffect(() => {
+  //   const data = window.sessionStorage.getItem("MY_APP_STATE");
+  //   if (data !== null) setAuthToken(JSON.parse(data));
+  // }, [setAuthToken]);
 
-  async function createNote(event) {
-    event.preventDefault();
-    const form = new FormData(event.target);
-    const image = form.get("image");
-    const data = {
-      name: form.get("name"),
-      description: form.get("description"),
-      image: image.name,
-    };
-    if (!!data.image) await Storage.put(data.name, image);
-    await API.graphql({
-      query: createNoteMutation,
-      variables: { input: data },
-    });
-    fetchNotes();
-    event.target.reset();
-  }
-
-  async function deleteNote({ id, name }) {
-    const newNotes = notes.filter((note) => note.id !== id);
-    setNotes(newNotes);
-    await Storage.remove(name);
-    await API.graphql({
-      query: deleteNoteMutation,
-      variables: { input: { id } },
-    });
-  }
+  // useEffect(() => {
+  //   window.sessionStorage.setItem("MY_APP_STATE", JSON.stringify(authToken));
+  // }, [authToken]);
   return (
-    <View className="App">
-      <Heading level={1}>My Notes App</Heading>
-      <View as="form" margin="3rem 0" onSubmit={createNote}>
-        <Flex direction="row" justifyContent="center">
-          <TextField
-            name="name"
-            placeholder="Note Name"
-            label="Note Name"
-            labelHidden
-            variation="quiet"
-            required
-          />
-          <TextField
-            name="description"
-            placeholder="Note Description"
-            label="Note Description"
-            labelHidden
-            variation="quiet"
-            required
-          />
-          <View
-            name="image"
-            as="input"
-            type="file"
-            style={{ alignSelf: "end" }}
-          />
-          <Button type="submit" variation="primary">
-            Create Note
-          </Button>
-        </Flex>
-      </View>
-      <Heading level={2}>Current Notes</Heading>
-      <View margin="3rem 0">
-        {notes.map((note) => (
-          <Flex
-            key={note.id || note.name}
-            direction="row"
-            justifyContent="center"
-            alignItems="center">
-            <Text as="strong" fontWeight={700}>
-              {note.name}
-            </Text>
-            <Text as="span">{note.description}</Text>
-            {note.image && (
-              <Image
-                src={note.image}
-                alt={`visual aid for ${notes.name}`}
-                style={{ width: 400 }}
-              />
-            )}
-            <Button variation="link" onClick={() => deleteNote(note)}>
-              Delete note
-            </Button>
-          </Flex>
-        ))}
-      </View>
-      <Button onClick={signOut}>Sign Out</Button>
-    </View>
+    <div
+      style={{
+        height: "100%",
+        width: "100%",
+        margin: "0px",
+        padding: "0px",
+        overflow: "hidden",
+      }}>
+      <Navbar />
+
+      <Routes>
+        <Route path="/home" element={<Home />} />
+
+        {authToken ? (
+          <>
+            <Route path="/*" element={<PrivateRoutes />} />
+            <Route index element={<Navigate to="/dashboard" />} />
+          </>
+        ) : (
+          <>
+            <Route path="auth/*" element={<AuthPage />} />
+            <Route path="*" element={<Navigate to="/auth" />} />
+          </>
+        )}
+      </Routes>
+    </div>
   );
 };
 
-export default withAuthenticator(App);
+export default App;
